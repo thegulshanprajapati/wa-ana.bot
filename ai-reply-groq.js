@@ -214,7 +214,8 @@ async function start() {
 start()
 
 setInterval(() => {
-  fetch('https://ana-wa-bot.onrender.com')
+  fetch('https://wa-ana-bot.onrender.com')
     .then(() => console.log('💓 Keep-alive ping sent'))
     .catch(() => console.log('⚠️ Ping failed'))
 }, 10 * 60 * 1000)
+
