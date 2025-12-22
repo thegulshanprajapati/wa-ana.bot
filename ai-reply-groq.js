@@ -72,7 +72,7 @@ function extractText(msg) {
 }
 
 /* ================= GROQ ================= */
-const groq = new Groq({ apiKey: GROQ_API_KEY })
+const groq = new Groq({ apiKey: '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' })
 
 async function aiReply(userText, history) {
   const rules = loadResponseRules()
@@ -214,7 +214,8 @@ async function start() {
 start()
 
 setInterval(() => {
-  fetch('https://ana-wa-bot.onrender.com')
+  fetch('https://wa-ana-bot.onrender.com')
     .then(() => console.log('💓 Keep-alive ping sent'))
     .catch(() => console.log('⚠️ Ping failed'))
 }, 10 * 60 * 1000)
+
