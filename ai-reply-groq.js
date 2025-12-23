@@ -266,7 +266,7 @@ async function start() {
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
-    if (!msg?.message || msg.key.fromMe) return
+    if (!msg?.message) return
 
     const chatId = msg.key.remoteJid
     const text = extractText(msg)
@@ -275,13 +275,13 @@ async function start() {
     const control = loadJSON(CONTROL_FILE, { chats: {} })
     const lower = text.toLowerCase()
 
-    if (lower === '@start-ana') {
+    if (lower === '@startana') {
       control.chats[chatId] = true
       fs.writeFileSync(CONTROL_FILE, JSON.stringify(control,null,2))
       return sock.sendMessage(chatId, { text: '✅ Ana activated' })
     }
 
-    if (lower === '@stop-ana') {
+    if (lower === '@stopana') {
       control.chats[chatId] = false
       fs.writeFileSync(CONTROL_FILE, JSON.stringify(control,null,2))
       return sock.sendMessage(chatId, { text: '⛔ Ana stopped' })
@@ -308,3 +308,4 @@ setInterval(() => {
 // safety
 process.on('unhandledRejection', () => {})
 process.on('uncaughtException', () => {})
+
