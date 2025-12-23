@@ -19,20 +19,134 @@ const Pino = require('pino')
 const fs = require('fs')
 const { Groq } = require('groq-sdk')
 const express = require('express')
+const QRCode = require('qrcode')
 
 /***********************
- * EXPRESS KEEP-ALIVE
+ * EXPRESS SERVER
  ***********************/
 const app = express()
 
+let latestQR = null
+let isConnected = false
+let qrGeneratedAt = null
+
 app.get('/', (req, res) => {
-  console.log('🌐 [SERVER] Ana bot alive 💙')
-  res.send('Ana bot alive 💙')
+  if (isConnected) {
+    return res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ana Connected</title>
+<style>
+body{
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(135deg,#fbc2eb,#a6c1ee);
+  font-family:sans-serif;
+}
+.card{
+  background:#fff;
+  padding:24px;
+  border-radius:20px;
+  box-shadow:0 20px 40px rgba(0,0,0,.25);
+  text-align:center;
+}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>💙 Ana Connected</h2>
+<p>WhatsApp login successful</p>
+</div>
+</body>
+</html>
+`)
+  }
+
+  if (!latestQR) {
+    return res.send(`
+      <h3 style="text-align:center;font-family:sans-serif">
+        ⌛ Generating QR…<br/>Refresh in few seconds
+      </h3>
+    `)
+  }
+
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ana Login</title>
+<style>
+body{
+  margin:0;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(135deg,#fbc2eb,#a6c1ee);
+  font-family:sans-serif;
+}
+.card{
+  background:white;
+  padding:20px;
+  border-radius:20px;
+  width:90%;
+  max-width:320px;
+  text-align:center;
+  box-shadow:0 20px 40px rgba(0,0,0,.25);
+}
+img{
+  width:260px;
+  border-radius:16px;
+  box-shadow:0 0 30px #f472b6;
+}
+.count{
+  margin-top:10px;
+  color:#555;
+}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>💗 Login Ana</h2>
+<p>Scan with WhatsApp</p>
+<img src="${latestQR}">
+<div class="count">
+QR expires in <span id="sec">20</span>s
+</div>
+</div>
+
+<script>
+let s = 20
+const el = document.getElementById('sec')
+setInterval(()=>{
+  s--
+  if(s<=0) location.reload()
+  el.innerText=s
+},1000)
+</script>
+</body>
+</html>
+`)
+})
+
+app.get('/status', (req, res) => {
+  res.json({
+    bot: 'Ana',
+    connected: isConnected,
+    qrAvailable: !!latestQR,
+    uptime: process.uptime(),
+    timestamp: Date.now()
+  })
 })
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log('🌐 [SERVER] Keep-alive server running on', PORT)
+  console.log('🌐 Server running on', PORT)
 })
 
 /***********************
@@ -46,16 +160,7 @@ const MEMORY_FILE = './memory.json'
 const RESPONSE_FILE = './response.txt'
 
 /***********************
- * STATE
- ***********************/
-const processed = new Set()
-const cooldown = new Map()
-
-let sock
-let connecting = false
-
-/***********************
- * FILE HELPERS
+ * HELPERS
  ***********************/
 function loadJSON(file, def) {
   if (!fs.existsSync(file)) {
@@ -73,21 +178,12 @@ function saveJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2))
 }
 
-function loadResponseRules() {
-  if (!fs.existsSync(RESPONSE_FILE)) return ''
-  return fs.readFileSync(RESPONSE_FILE, 'utf-8')
-}
-
-/***********************
- * TEXT EXTRACTOR
- ***********************/
 function extractText(msg) {
-  if (!msg.message) return null
   return (
-    msg.message.conversation ||
-    msg.message.extendedTextMessage?.text ||
-    msg.message.imageMessage?.caption ||
-    msg.message.videoMessage?.caption ||
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    msg.message?.imageMessage?.caption ||
+    msg.message?.videoMessage?.caption ||
     null
   )
 }
@@ -97,172 +193,99 @@ function extractText(msg) {
  ***********************/
 const groq = new Groq({ apiKey: GROQ_API_KEY })
 
-async function aiReply(userText, history) {
-  const rules = loadResponseRules()
-
-  const systemPrompt = `
-${rules}
-
-Rules:
-- Hinglish
-- Always use "aap"
-- WhatsApp style
-- Never mention AI/system
-
-Recent chat:
-${history.join('\n')}
-`
+async function aiReply(text) {
+  const rules = fs.existsSync(RESPONSE_FILE)
+    ? fs.readFileSync(RESPONSE_FILE, 'utf-8')
+    : ''
 
   const res = await groq.chat.completions.create({
     model: 'openai/gpt-oss-120b',
     temperature: 0.6,
     max_completion_tokens: 100,
     messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userText }
+      { role: 'system', content: rules },
+      { role: 'user', content: text }
     ]
   })
 
-  return res.choices[0].message.content?.trim() || null
+  return res.choices[0].message.content?.trim()
 }
 
 /***********************
  * BOT START
  ***********************/
 async function start() {
-  if (connecting) return
-  connecting = true
-
-  console.log('🚀 [BOT] Ana starting...')
-
   const { state, saveCreds } = await useMultiFileAuthState('auth')
 
-  sock = makeWASocket({
+  const sock = makeWASocket({
     auth: state,
     logger: Pino({ level: 'silent' }),
     browser: ['Chrome', 'Windows', '10']
   })
 
-  sock.ev.on('creds.update', () => {
-    console.log('🔐 [AUTH] Credentials updated')
-    saveCreds()
-  })
+  sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update
+
+    if (qr) {
+      latestQR = await QRCode.toDataURL(qr)
+      qrGeneratedAt = Date.now()
+      isConnected = false
+      console.log('📸 QR generated')
+    }
 
     if (connection === 'open') {
-      console.log('✅ [SOCKET] WhatsApp connected')
-      connecting = false
-      return
+      isConnected = true
+      latestQR = null
+      qrGeneratedAt = null
+      console.log('✅ WhatsApp connected')
     }
 
     if (connection === 'close') {
+      isConnected = false
       const code = lastDisconnect?.error?.output?.statusCode
-      console.log('❌ [SOCKET] Connection closed. Code:', code)
-
-      if (code === DisconnectReason.loggedOut) {
-        console.log('🚫 [SOCKET] Logged out. Delete auth & rescan QR')
-        connecting = false
-        return
-      }
-
-      if (code) {
-        console.log('🔄 [SOCKET] Reconnecting in 5s...')
-        connecting = false
+      if (code !== DisconnectReason.loggedOut) {
         setTimeout(start, 5000)
-      } else {
-        console.log('ℹ️ [SOCKET] Normal close, ignoring')
-        connecting = false
       }
     }
   })
 
-  /***********************
-   * MESSAGE HANDLER
-   ***********************/
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
-    if (!msg?.message) return
-    if (msg.key.fromMe) return
-
-    if (
-      msg.message.reactionMessage ||
-      msg.message.protocolMessage
-    ) return
-
-    if (processed.has(msg.key.id)) return
-    processed.add(msg.key.id)
-    setTimeout(() => processed.delete(msg.key.id), 60000)
+    if (!msg?.message || msg.key.fromMe) return
 
     const chatId = msg.key.remoteJid
-    const senderId = msg.key.participant || chatId
-
     const text = extractText(msg)
     if (!text) return
 
-    console.log(`📩 [MSG] From: ${senderId} | Text: ${text}`)
-
-    const lower = text.toLowerCase()
     const control = loadJSON(CONTROL_FILE, { chats: {} })
+    const lower = text.toLowerCase()
 
-    // START
-    if (lower.includes('@start-ana')) {
+    if (lower === '@start-ana') {
       control.chats[chatId] = true
       saveJSON(CONTROL_FILE, control)
-      console.log('🟢 [CONTROL] Ana ACTIVATED for chat:', chatId)
-      await sock.sendMessage(chatId, {
-        text: '✅ Ana activated in this chat.'
-      })
-      return
+      return sock.sendMessage(chatId, { text: '✅ Ana activated' })
     }
 
-    // STOP
-    if (lower.includes('@stop-ana')) {
+    if (lower === '@stop-ana') {
       control.chats[chatId] = false
       saveJSON(CONTROL_FILE, control)
-      console.log('🔴 [CONTROL] Ana STOPPED for chat:', chatId)
-      await sock.sendMessage(chatId, {
-        text: '⛔ Ana stopped in this chat.'
-      })
-      return
+      return sock.sendMessage(chatId, { text: '⛔ Ana stopped' })
     }
 
     if (!control.chats[chatId]) return
 
-    // Cooldown
-    const now = Date.now()
-    if (now - (cooldown.get(senderId) || 0) < 4000) return
-    cooldown.set(senderId, now)
-
-    const memory = loadJSON(MEMORY_FILE, { users: {} })
-    memory.users[senderId] ||= { history: [] }
-    const user = memory.users[senderId]
-
-    user.history.push(`User: ${text}`)
-    if (user.history.length > 6) user.history.shift()
-
-    const reply = await aiReply(text, user.history)
-    if (!reply) return
-
-    user.history.push(`Ana: ${reply}`)
-    saveJSON(MEMORY_FILE, memory)
-
-    await sock.sendPresenceUpdate('composing', chatId)
-    await new Promise(r => setTimeout(r, 1200))
-    await sock.sendMessage(chatId, { text: reply })
-
-    console.log('💬 [REPLY] Ana replied successfully')
+    const reply = await aiReply(text)
+    if (reply) await sock.sendMessage(chatId, { text: reply })
   })
 }
 
 start()
 
 /***********************
- * KEEP-ALIVE PING
+ * KEEP ALIVE
  ***********************/
 setInterval(() => {
   fetch('https://ana-wa-bot.onrender.com')
-    .then(() => console.log('💓 [PING] Keep-alive ping sent'))
-    .catch(() => console.log('⚠️ [PING] Ping failed'))
 }, 10 * 60 * 1000)
