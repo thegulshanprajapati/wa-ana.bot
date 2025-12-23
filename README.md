@@ -36,7 +36,7 @@ https://wa-ana-bot.onrender.com
 
 ## 📂 Project Structure
 
-
+```
 wa-bot/
 │
 ├── ai-reply-groq.js     # Main bot + Express server
@@ -45,7 +45,7 @@ wa-bot/
 ├── control.json        # Chat activation control
 ├── auth/               # WhatsApp session files
 └── README.md
-
+```
 
 ---
 
