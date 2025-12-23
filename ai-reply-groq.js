@@ -1,5 +1,5 @@
 /***********************
- * FETCH (safe)
+ * SAFE FETCH
  ***********************/
 const fetch =
   global.fetch ||
@@ -30,6 +30,7 @@ let latestQR = null
 let isConnected = false
 let qrGeneratedAt = null
 
+/* ================= ROOT PAGE ================= */
 app.get('/', (req, res) => {
   if (isConnected) {
     return res.send(`
@@ -49,8 +50,8 @@ body{
 }
 .card{
   background:#fff;
-  padding:24px;
-  border-radius:20px;
+  padding:26px;
+  border-radius:22px;
   box-shadow:0 20px 40px rgba(0,0,0,.25);
   text-align:center;
 }
@@ -58,9 +59,14 @@ body{
 </head>
 <body>
 <div class="card">
-<h2>💙 Ana Connected</h2>
-<p>WhatsApp login successful</p>
+  <h2>💙 Ana Connected</h2>
+  <p>WhatsApp login successful</p>
 </div>
+
+<script>
+  // 🔁 heartbeat so Render doesn't sleep
+  setInterval(()=>fetch('/status').catch(()=>{}),30000)
+</script>
 </body>
 </html>
 `)
@@ -68,10 +74,14 @@ body{
 
   if (!latestQR) {
     return res.send(`
-      <h3 style="text-align:center;font-family:sans-serif">
-        ⌛ Generating QR…<br/>Refresh in few seconds
-      </h3>
-    `)
+<h3 style="text-align:center;font-family:sans-serif">
+⌛ Generating QR…<br/>Please wait
+</h3>
+
+<script>
+setTimeout(()=>location.reload(),4000)
+</script>
+`)
   }
 
   res.send(`
@@ -93,9 +103,9 @@ body{
 .card{
   background:white;
   padding:20px;
-  border-radius:20px;
+  border-radius:22px;
   width:90%;
-  max-width:320px;
+  max-width:330px;
   text-align:center;
   box-shadow:0 20px 40px rgba(0,0,0,.25);
 }
@@ -112,28 +122,36 @@ img{
 </head>
 <body>
 <div class="card">
-<h2>💗 Login Ana</h2>
-<p>Scan with WhatsApp</p>
-<img src="${latestQR}">
-<div class="count">
-QR expires in <span id="sec">20</span>s
-</div>
+  <h2>💗 Login Ana</h2>
+  <p>Scan with WhatsApp</p>
+  <img src="${latestQR}">
+  <div class="count">
+    QR expires in <span id="sec">20</span>s
+  </div>
 </div>
 
 <script>
 let s = 20
 const el = document.getElementById('sec')
+
+// ⏱ QR expiry refresh
 setInterval(()=>{
   s--
   if(s<=0) location.reload()
   el.innerText=s
 },1000)
+
+// 💓 heartbeat (anti-sleep)
+setInterval(()=>{
+  fetch('/status').catch(()=>{})
+},30000)
 </script>
 </body>
 </html>
 `)
 })
 
+/* ================= STATUS API ================= */
 app.get('/status', (req, res) => {
   res.json({
     bot: 'Ana',
@@ -156,7 +174,6 @@ const GROQ_API_KEY =
   process.env.GROQ_API_KEY || 'PUT_YOUR_GROQ_KEY'
 
 const CONTROL_FILE = './control.json'
-const MEMORY_FILE = './memory.json'
 const RESPONSE_FILE = './response.txt'
 
 /***********************
@@ -172,10 +189,6 @@ function loadJSON(file, def) {
   } catch {
     return def
   }
-}
-
-function saveJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2))
 }
 
 function extractText(msg) {
@@ -264,13 +277,13 @@ async function start() {
 
     if (lower === '@start-ana') {
       control.chats[chatId] = true
-      saveJSON(CONTROL_FILE, control)
+      fs.writeFileSync(CONTROL_FILE, JSON.stringify(control,null,2))
       return sock.sendMessage(chatId, { text: '✅ Ana activated' })
     }
 
     if (lower === '@stop-ana') {
       control.chats[chatId] = false
-      saveJSON(CONTROL_FILE, control)
+      fs.writeFileSync(CONTROL_FILE, JSON.stringify(control,null,2))
       return sock.sendMessage(chatId, { text: '⛔ Ana stopped' })
     }
 
@@ -284,8 +297,14 @@ async function start() {
 start()
 
 /***********************
- * KEEP ALIVE
+ * SERVER SELF PING (ANTI-SLEEP)
  ***********************/
 setInterval(() => {
-  fetch('https://ana-wa-bot.onrender.com')
-}, 10 * 60 * 1000)
+  fetch('https://wa-ana-bot.onrender.com/status')
+    .then(() => console.log('💓 Keep-alive ping'))
+    .catch(() => {})
+}, 5 * 60 * 1000)
+
+// safety
+process.on('unhandledRejection', () => {})
+process.on('uncaughtException', () => {})
