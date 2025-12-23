@@ -1,10 +1,3 @@
-Theek hai 👍
-neeche **final polished README.md** likh rahi hoon — **direct copy-paste**, GitHub-ready, clean & professional.
-Isko exactly `README.md` naam se save kar dena ✅
-
----
-
-```md
 # 🤖 Ana WhatsApp Bot
 
 **Ana** is a smart, Hinglish-speaking WhatsApp bot built using **Baileys** and **Groq AI**, featuring a **cute web-based QR login UI**, auto-refresh, anti-sleep mechanism for Render, and a health monitoring API.
@@ -43,7 +36,6 @@ https://wa-ana-bot.onrender.com
 
 ## 📂 Project Structure
 
-```
 
 wa-bot/
 │
@@ -54,7 +46,6 @@ wa-bot/
 ├── auth/               # WhatsApp session files
 └── README.md
 
-````
 
 ---
 
@@ -195,16 +186,3 @@ Engineering Student | Web & AI Developer
 
 This project is for **learning and personal use**.
 Feel free to fork, modify, and improve 🚀
-
-```
-
----
-
-Agar chaho next:
-- README me **screenshots section** add kar doon  
-- **GitHub badges** (Node, Render, License) laga doon  
-- ya **open-source professional style** bana doon  
-
-Bas bolo 😊  
-Jessica yahin hoon 💙
-```
