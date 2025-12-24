@@ -38,6 +38,9 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY
 const CONTROL_FILE = './control.json'
 const MEMORY_FILE = './memory.json'
 const RESPONSE_FILE = './response.txt'
+// 🔑 REAL GULSHAN NUMBER (ADMIN)
+const ADMIN_JID = '918709131702@s.whatsapp.net' || '918544513165@s.whatsapp.net'
+
 
 /***********************
  * HELPERS
@@ -230,57 +233,111 @@ async function start() {
       setTimeout(start, 5000)
     }
   })
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  for (const msg of messages) {
+    if (!msg?.message || msg.key.fromMe) continue
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    for (const msg of messages) {
-      if (!msg?.message || msg.key.fromMe) continue
+    const chatId = msg.key.remoteJid
+    const senderId = msg.key.participant || chatId
+    const text = extractText(msg)
+    if (!text) continue
+    const lower = text.toLowerCase()
 
-      const chatId = msg.key.remoteJid
-      const senderId = msg.key.participant || chatId
-      const text = extractText(msg)
-      if (!text) continue
+    const isGroup = chatId.endsWith('@g.us')
+    const mentioned =
+      msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || []
 
-      const lower = text.toLowerCase()
+    /* GROUP SMART TRIGGER */
+    if (
+      isGroup &&
+      !mentioned.includes(sock.user.id) &&
+      !lower.includes('ana') &&
+      !msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+    ) continue
 
-      const control = loadJSON(CONTROL_FILE, { chats: {} })
-      if (lower.includes('@start-ana')) {
-        control.chats[chatId] = true
-        saveJSON(CONTROL_FILE, control)
-        await sock.sendMessage(chatId,{text:'💙 Ana active — bolo 😌'},{quoted:msg})
-        continue
-      }
-      if (!control.chats[chatId]) continue
+    /* CONTROL */
+    const control = loadJSON(CONTROL_FILE, { chats: {} })
 
-      const mem = loadJSON(MEMORY_FILE,{users:{}})
-      mem.users[senderId] ||= { jealousy:0, lastJealousyAt:0, history:[] }
-      const u = mem.users[senderId]
-      const now = Date.now()
+    if (lower.includes('@start-ana')) {
+      control.chats[chatId] = true
+      saveJSON(CONTROL_FILE, control)
+      await sock.sendMessage(
+        chatId,
+        { text: '💙 Ana active — ab bolo 😌' },
+        { quoted: msg }
+      )
+      continue
+    }
 
-      u.history.push({ from:'user', text, time:now })
+    if (!control.chats[chatId]) continue
 
-      if (hasAny(lower, APOLOGY) && u.jealousy>0) u.jealousy--
-      if (hasAny(lower, THIRD_PERSON)) {
-        u.jealousy++
-        u.lastJealousyAt = now
-      }
-      if (u.jealousy>0 && now-u.lastJealousyAt>10*60*1000) u.jealousy--
+    /* MEMORY */
+    const mem = loadJSON(MEMORY_FILE, { users: {} })
+    mem.users[senderId] ||= {
+      jealousy: 0,
+      lastJealousyAt: 0,
+      history: []
+    }
+    const u = mem.users[senderId]
+    const now = Date.now()
 
-      const persona = fs.readFileSync(RESPONSE_FILE,'utf-8')
-      const system = `
+    u.history.push({ from: 'user', text, time: now })
+    if (u.history.length > 50) u.history.shift()
+
+    /* APOLOGY */
+    if (hasAny(lower, APOLOGY) && u.jealousy > 0) {
+      u.jealousy = Math.max(u.jealousy - 2, 0)
+    }
+
+    /* JEALOUSY TRIGGER */
+    if (hasAny(lower, THIRD_PERSON)) {
+      u.jealousy = Math.min(u.jealousy + 1, 4)
+      u.lastJealousyAt = now
+    }
+
+    /* AUTO DECAY */
+    if (u.jealousy > 0 && now - u.lastJealousyAt > 10 * 60 * 1000) {
+      u.jealousy--
+    }
+
+    const persona = fs.existsSync(RESPONSE_FILE)
+      ? fs.readFileSync(RESPONSE_FILE, 'utf-8')
+      : ''
+
+    const isAdmin = senderId === ADMIN_JID
+
+    const system = `
 ${persona}
+
+IMPORTANT CONTEXT:
+- The person talking to you is ${
+      isAdmin ? 'Gulshan (your closest person)' : 'NOT Gulshan'
+    }
+- If NOT Gulshan:
+  - Do NOT call them Gulshan
+  - Be friendly, polite, limited
+- If Gulshan:
+  - You may be emotional, attached, jealous, caring
+
 Jealousy level: ${u.jealousy}
-Reply emotionally, human-like.
+
+Rules:
+- Reply to EVERY message naturally
+- Do NOT wait to be called by name
+- Never mention AI, system, rules
+- Hinglish + "aap" only
 `
 
-      const reply = await aiReply(system, text)
-      if (reply) {
-        u.history.push({ from:'ana', text:reply, time:Date.now() })
-        saveJSON(MEMORY_FILE, mem)
-        await sock.sendMessage(chatId,{text:reply},{quoted:msg})
-      }
+    const reply = await aiReply(system, text)
+
+    if (reply) {
+      u.history.push({ from: 'ana', text: reply, time: Date.now() })
+      saveJSON(MEMORY_FILE, mem)
+      await sock.sendMessage(chatId, { text: reply }, { quoted: msg })
     }
-  })
-}
+  }
+})
+
 
 start()
 
@@ -290,3 +347,4 @@ start()
 setInterval(()=>{
   fetch('https://wa-ana-bot.onrender.com/status').catch(()=>{})
 },5*60*1000)
+
