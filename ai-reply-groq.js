@@ -337,7 +337,7 @@ Rules:
     }
   }
 })
-
+}
 
 start()
 
@@ -347,4 +347,5 @@ start()
 setInterval(()=>{
   fetch('https://wa-ana-bot.onrender.com/status').catch(()=>{})
 },5*60*1000)
+
 
