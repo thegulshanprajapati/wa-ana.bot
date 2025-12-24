@@ -255,21 +255,53 @@ sock.ev.on('messages.upsert', async ({ messages }) => {
       !msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
     ) continue
 
-    /* CONTROL */
-    const control = loadJSON(CONTROL_FILE, { chats: {} })
+    // /* CONTROL */
+    // const control = loadJSON(CONTROL_FILE, { chats: {} })
 
-    if (lower.includes('@start-ana')) {
-      control.chats[chatId] = true
-      saveJSON(CONTROL_FILE, control)
-      await sock.sendMessage(
-        chatId,
-        { text: '💙 Ana active — ab bolo 😌' },
-        { quoted: msg }
-      )
-      continue
-    }
+    // if (lower.includes('@start-ana')) {
+    //   control.chats[chatId] = true
+    //   saveJSON(CONTROL_FILE, control)
+    //   await sock.sendMessage(
+    //     chatId,
+    //     { text: '💙 Ana active — ab bolo 😌' },
+    //     { quoted: msg }
+    //   )
+    //   continue
+    // }
 
-    if (!control.chats[chatId]) continue
+    // if (!control.chats[chatId]) continue
+/* ================= CONTROL ================= */
+
+const control = loadJSON(CONTROL_FILE, { chats: {} })
+
+// START ANA
+if (lower === '@start-ana') {
+  control.chats[chatId] = true
+  saveJSON(CONTROL_FILE, control)
+
+  await sock.sendMessage(
+    chatId,
+    { text: '💙 Ana active ho gayi… ab bolo 😊' },
+    { quoted: msg }
+  )
+  continue
+}
+
+// STOP ANA
+if (lower === '@stop-ana') {
+  control.chats[chatId] = false
+  saveJSON(CONTROL_FILE, control)
+
+  await sock.sendMessage(
+    chatId,
+    { text: '🤍 Theek hai… main chup ho jaungi.' },
+    { quoted: msg }
+  )
+  continue
+}
+
+// AGAR CHAT OFF HAI → KUCH NA BOLO
+if (!control.chats[chatId]) continue
 
     /* MEMORY */
     const mem = loadJSON(MEMORY_FILE, { users: {} })
@@ -347,5 +379,6 @@ start()
 setInterval(()=>{
   fetch('https://wa-ana-bot.onrender.com/status').catch(()=>{})
 },5*60*1000)
+
 
 
