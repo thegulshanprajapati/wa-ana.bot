@@ -45,6 +45,53 @@ const RESPONSE_FILE = './response.txt'
 const app = express()
 let latestQR = null
 let isConnected = false
+let sockGlobal = null
+
+app.use(express.urlencoded({ extended: true }))
+app.use(express.json())
+
+const unlocked = {}
+
+function currentCode() {
+  const d = new Date()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${hh}${mm}`
+}
+
+function getTokenFromReq(req) {
+  const hdr = req.headers.cookie || ''
+  const parts = hdr.split(';').map(s => s.trim()).filter(Boolean)
+  for (const p of parts) {
+    const [k, v] = p.split('=')
+    if (k === 'token') return v
+  }
+  return null
+}
+
+// simple guard for GET UI routes
+app.use((req, res, next) => {
+  if (req.method === 'GET' && req.path !== '/status' && req.path !== '/login') {
+    const token = getTokenFromReq(req)
+    if (!token || !unlocked[token]) {
+      return res.send(`
+        <html>
+        <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+          <div style="width:320px">
+            <h3 style="text-align:center">Protected UI — Enter code</h3>
+            <form method="POST" action="/login">
+              <input name="code" placeholder="Enter 4-digit code" style="width:100%;padding:8px;font-size:16px;margin-bottom:8px" />
+              <button style="width:100%;padding:8px;font-size:16px">Unlock</button>
+            </form>
+            <p style="font-size:12px;color:#666;margin-top:8px">Code changes each minute (HHMM). Example: 2:32 → 0232</p>
+          </div>
+        </body>
+        </html>
+      `)
+    }
+  }
+  next()
+})
 
 app.get('/', (req, res) => {
   if (!isConnected && latestQR) {
@@ -75,6 +122,32 @@ app.get('/status', (_, res) => {
 app.get('/chats', (_, res) => {
   const mem = loadJSON(MEMORY_FILE, { users: {} })
   res.json(mem.users)
+})
+
+app.post('/login', (req, res) => {
+  const code = (req.body && req.body.code) || ''
+  if (code === currentCode()) {
+    const token = Math.random().toString(36).slice(2)
+    unlocked[token] = Date.now()
+    res.setHeader('Set-Cookie', `token=${token}; HttpOnly; Path=/; Max-Age=300`)
+    return res.redirect('/')
+  }
+  return res.send('<p>Invalid code. <a href="/">Try again</a></p>')
+})
+
+app.post('/send', async (req, res) => {
+  const token = getTokenFromReq(req)
+  if (!token || !unlocked[token]) return res.status(403).send('locked')
+  const { chatId, message } = req.body || {}
+  if (!chatId || !message) return res.status(400).send('missing')
+  if (!sockGlobal) return res.status(500).send('not-connected')
+  try {
+    await sockGlobal.sendMessage(chatId, { text: message })
+    return res.send('ok')
+  } catch (e) {
+    console.error('send failed', e)
+    return res.status(500).send('error')
+  }
 })
 
 app.listen(PORT, () =>
@@ -147,30 +220,32 @@ async function start() {
     logger: Pino({ level: 'silent' })
   })
 
-  sock.ev.on('creds.update', saveCreds)
+    sockGlobal = sock
 
-  sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
-    if (qr) {
-      latestQR = await QRCode.toDataURL(qr)
-      isConnected = false
-    }
+    sock.ev.on('creds.update', saveCreds)
 
-    if (connection === 'open') {
-      isConnected = true
-      latestQR = null
-      console.log('✅ WhatsApp connected')
-    }
+    sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
+      if (qr) {
+        latestQR = await QRCode.toDataURL(qr)
+        isConnected = false
+      }
 
-    if (
-      connection === 'close' &&
-      lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-    ) {
-      console.log('🔄 Reconnecting...')
-      setTimeout(start, 5000)
-    }
-  })
+      if (connection === 'open') {
+        isConnected = true
+        latestQR = null
+        console.log('✅ WhatsApp connected')
+      }
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
+      if (
+        connection === 'close' &&
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      ) {
+        console.log('🔄 Reconnecting...')
+        setTimeout(start, 5000)
+      }
+    })
+
+    sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
       if (!msg?.message || msg.key.fromMe) continue
 
