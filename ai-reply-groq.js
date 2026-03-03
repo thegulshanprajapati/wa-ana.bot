@@ -150,9 +150,18 @@ app.post('/send', async (req, res) => {
   }
 })
 
-app.listen(PORT, () =>
-  console.log('🌐 Server running on port', PORT)
-)
+if (require.main === module) {
+  // running standalone
+  app.listen(PORT, () =>
+    console.log('🌐 Server running on port', PORT)
+  )
+  start()
+} else {
+  // when imported (e.g. by Vercel serverless handler)
+  start()
+}
+
+module.exports = app
 
 /***********************
  * HELPERS
@@ -220,14 +229,7 @@ async function start() {
     logger: Pino({ level: 'silent' })
   })
 
-    sockGlobal = sock
-
-    sock.ev.on('creds.update', saveCreds)
-
-    sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
-      if (qr) {
-        latestQR = await QRCode.toDataURL(qr)
-        isConnected = false
+  // store global reference so /send handler can use it
       }
 
       if (connection === 'open') {
