@@ -111,6 +111,35 @@ GROQ_API_KEY = your_groq_api_key
 
 ---
 
+## 🚀 Deploy on Vercel
+
+This repository is also configured for deployment to [Vercel](https://vercel.com) using a serverless function.
+
+1. Install the CLI if you haven't already:
+   ```bash
+   npm install -g vercel
+   ```
+2. Log in and link the project:
+   ```bash
+   vercel login
+   vercel
+   ```
+3. Set your environment variables (e.g. `GROQ_API_KEY`) via the Vercel dashboard or CLI.
+4. Deploy:
+   ```bash
+   vercel --prod
+   ```
+
+### Vercel Notes
+
+* The `vercel.json` in the repo ensures all routes are handled by `ai-reply-groq.js`.
+* A time‑based code (HHMM) protects the UI; enter the current time to unlock the page.
+* **Warning:** Vercel serverless functions are ephemeral. The WhatsApp socket connection may
+not persist across invocations, so the bot might disconnect over time. For continuous
+operation, consider a dedicated server/VM.
+
+---
+
 ## 🧪 Health Check API
 
 Check bot status using:

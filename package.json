@@ -4,7 +4,8 @@
   "description": "Ana WhatsApp Bot",
   "main": "ai-reply-groq.js",
   "scripts": {
-    "start": "node ai-reply-groq.js"
+    "start": "node ai-reply-groq.js",
+    "vercel-build": "npm install"
   },
   "type": "commonjs",
   "dependencies": {

@@ -230,22 +230,30 @@ async function start() {
   })
 
   // store global reference so /send handler can use it
-      }
+  sockGlobal = sock
 
-      if (connection === 'open') {
-        isConnected = true
-        latestQR = null
-        console.log('✅ WhatsApp connected')
-      }
+  sock.ev.on('creds.update', saveCreds)
 
-      if (
-        connection === 'close' &&
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-      ) {
-        console.log('🔄 Reconnecting...')
-        setTimeout(start, 5000)
-      }
-    })
+  sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
+    if (qr) {
+      latestQR = await QRCode.toDataURL(qr)
+      isConnected = false
+    }
+
+    if (connection === 'open') {
+      isConnected = true
+      latestQR = null
+      console.log('✅ WhatsApp connected')
+    }
+
+    if (
+      connection === 'close' &&
+      lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+    ) {
+      console.log('🔄 Reconnecting...')
+      setTimeout(start, 5000)
+    }
+  })
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
