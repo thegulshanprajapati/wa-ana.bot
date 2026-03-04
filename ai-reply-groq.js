@@ -42,6 +42,9 @@ const RESPONSE_FILE = './response.txt'
 /***********************
  * EXPRESS SERVER
  ***********************/
+const crypto = require('crypto')
+const path = require('path')
+
 const app = express()
 let latestQR = null
 let isConnected = false
@@ -49,6 +52,20 @@ let sockGlobal = null
 
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
+
+// serve static assets (CSS) from public/
+app.use(express.static(path.join(__dirname, 'public')))
+
+// simple CSP middleware: generate nonce & set header each request
+app.use((req, res, next) => {
+  const nonce = crypto.randomBytes(16).toString('base64')
+  res.locals.cspNonce = nonce
+  res.setHeader(
+    'Content-Security-Policy',
+    `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self';`
+  )
+  next()
+})
 
 const unlocked = {}
 
@@ -77,21 +94,27 @@ function getTokenFromReq(req) {
 }
 
 
-// helper that returns the login page HTML; accepts an optional error message
-function renderLoginPage(errorMsg = '') {
+// helper that returns the login page HTML; accepts a CSP nonce and an optional error message
+function renderLoginPage(nonce, errorMsg = '') {
+  // nonce is generated per-request by CSP middleware and must be passed in
   return `
         <html>
-        <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
-          <div style="width:320px">
-            <h3 style="text-align:center">Protected UI — Enter code</h3>
-            ${errorMsg ? `<p style="color:red;text-align:center">${errorMsg}</p>` : ''}
+        <head>
+          <meta charset="utf-8" />
+          <title>Ana Bot Login</title>
+          <link rel="stylesheet" href="/style.css" />
+        </head>
+        <body>
+          <div class="container">
+            <h3>Protected UI — Enter code</h3>
+            ${errorMsg ? `<p class="error">${errorMsg}</p>` : ''}
             <form method="POST" action="/login" id="loginForm">
-              <input id="codeInput" name="code" maxlength="4" autocomplete="off" placeholder="Enter 4-digit code" style="width:100%;padding:8px;font-size:16px;margin-bottom:8px" />
-              <button id="submitBtn" style="width:100%;padding:8px;font-size:16px">Unlock</button>
+              <input id="codeInput" name="code" maxlength="4" autocomplete="off" placeholder="Enter 4-digit code" />
+              <button id="submitBtn">Unlock</button>
             </form>
-            <p id="hint" style="font-size:12px;color:#666;margin-top:8px">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232. Submit button appears only when the code is correct.</p>
+            <p id="hint">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232. Submit button appears only when the code is correct.</p>
           </div>
-          <script>
+          <script nonce="${nonce}">
             function currentCode(){
               const now=new Date();
               const ist=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
@@ -131,19 +154,27 @@ app.use((req, res, next) => {
   if (req.method === 'GET' && req.path !== '/status' && req.path !== '/login') {
     const token = getTokenFromReq(req)
     if (!token || !unlocked[token]) {
-      return res.send(renderLoginPage())
+      return res.send(renderLoginPage(res.locals.cspNonce))
     }
   }
   next()
 })
 
 app.get('/', (req, res) => {
+  const nonce = res.locals.cspNonce || ''
   if (!isConnected && latestQR) {
     return res.send(`
       <html>
-      <body style="display:flex;align-items:center;justify-content:center;height:100vh">
-        <img src="${latestQR}" width="280"/>
-        <script>setTimeout(()=>location.reload(),20000)</script>
+      <head>
+        <meta charset="utf-8" />
+        <title>Ana Bot Status</title>
+        <link rel="stylesheet" href="/style.css" />
+      </head>
+      <body>
+        <div class="container centered">
+          <img class="qr" src="${latestQR}" width="280" />
+        </div>
+        <script nonce="${nonce}">setTimeout(()=>location.reload(),20000)</script>
       </body>
       </html>
     `)
@@ -151,12 +182,36 @@ app.get('/', (req, res) => {
 
   if (!isConnected) {
     return res.send(`
-      <h3 style="text-align:center">⌛ Generating QR…</h3>
-      <script>setTimeout(()=>location.reload(),3000)</script>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Ana Bot Status</title>
+        <link rel="stylesheet" href="/style.css" />
+      </head>
+      <body>
+        <div class="container centered">
+          <h3>⌛ Generating QR…</h3>
+        </div>
+        <script nonce="${nonce}">setTimeout(()=>location.reload(),3000)</script>
+      </body>
+      </html>
     `)
   }
 
-  res.send(`<h2 style="text-align:center">💙 Ana Connected</h2>`)
+  res.send(`
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Ana Bot Status</title>
+      <link rel="stylesheet" href="/style.css" />
+    </head>
+    <body>
+      <div class="container centered">
+        <h2>💙 Ana Connected</h2>
+      </div>
+    </body>
+    </html>
+  `)
 })
 
 app.get('/status', (_, res) => {
@@ -180,7 +235,7 @@ app.post('/login', (req, res) => {
     return res.redirect('/')
   }
   // show the page again with an error message
-  return res.send(renderLoginPage('Invalid code.'))
+  return res.send(renderLoginPage(res.locals.cspNonce, 'Invalid code.'))
 })
 
 app.post('/send', async (req, res) => {
