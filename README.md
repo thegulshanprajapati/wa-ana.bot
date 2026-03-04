@@ -13,7 +13,7 @@ https://wa-ana-bot.onrender.com
 - 🧠 AI-powered replies via **Groq**
 - 💬 Hinglish + WhatsApp-style conversation
 - 🖥️ **Web-based QR Login**
-  - Cute & mobile responsive UI
+  - Cute & mobile responsive UI (available from both `ai-reply-groq.js` and the simpler `index.js` entrypoints)
   - Auto-refresh QR
   - QR expiry countdown
 - 🟢 `/status` API for bot health
@@ -133,7 +133,7 @@ This repository is also configured for deployment to [Vercel](https://vercel.com
 ### Vercel Notes
 
 * The `vercel.json` in the repo ensures all routes are handled by `ai-reply-groq.js`.
-* A time‑based code (HHMM) protects the UI; enter the current Indian time (IST) to unlock the page. The unlock button only appears once you type a matching code.
+* A time‑based code (HHMM) protects the UI; enter the current Indian time (IST) to unlock the page. The code is private and never shown on the page.
 * The web UI has been upgraded with a clean, responsive layout and custom CSS. All pages now load a stylesheet from `/public/style.css` and include strong Content Security Policy headers to block unsafe scripts.
 * **Warning:** Vercel serverless functions are ephemeral. The WhatsApp socket connection may
 not persist across invocations, so the bot might disconnect over time. For continuous

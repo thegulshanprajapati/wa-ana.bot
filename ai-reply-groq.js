@@ -113,7 +113,6 @@ function renderLoginPage(nonce, errorMsg = '') {
             input{font-size:16px;padding:12px;width:100%;box-sizing:border-box;margin-bottom:16px;border:1px solid #ccc;border-radius:6px}
             button{font-size:16px;padding:12px;width:100%;border:none;border-radius:6px;background:#0078d4;color:#fff;cursor:pointer;font-weight:600}
             button:disabled,button[style*="display:none"]{background:#aaa;cursor:not-allowed}
-            #hint{font-size:12px;color:#666;margin-top:8px;text-align:center}
           </style>
         </head>
         <body>
@@ -124,7 +123,6 @@ function renderLoginPage(nonce, errorMsg = '') {
               <input id="codeInput" name="code" maxlength="4" autocomplete="off" placeholder="Enter 4-digit code" />
               <button id="submitBtn">Unlock</button>
             </form>
-            <p id="hint">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232. Your code is never shown on the page; enter the current time to unlock. Submit button appears only when the code is correct.</p>
           </div>
           <script nonce="${nonce}">
             function currentCode(){
@@ -137,21 +135,17 @@ function renderLoginPage(nonce, errorMsg = '') {
             document.addEventListener('DOMContentLoaded',()=>{
               const input=document.getElementById('codeInput');
               const btn=document.getElementById('submitBtn');
-              const hint=document.getElementById('hint');
               btn.style.display='none';
               input.addEventListener('input',()=>{
                 if(input.value===currentCode()){
                   btn.style.display='block';
-                  hint.textContent='✅ Code correct! Press unlock.';
                 } else {
                   btn.style.display='none';
-                  hint.textContent='Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232';
                 }
               });
               setInterval(()=>{
                 if(input.value===currentCode()){
                   btn.style.display='block';
-                  hint.textContent='✅ Code correct! Press unlock.';
                 }
               },1000);
             });
