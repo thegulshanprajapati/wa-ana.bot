@@ -60,9 +60,11 @@ app.use(express.static(path.join(__dirname, 'public')))
 app.use((req, res, next) => {
   const nonce = crypto.randomBytes(16).toString('base64')
   res.locals.cspNonce = nonce
+  // allow external scripts/styles from self and inline content only when
+  // tagged with the matching nonce. this blocks eval/unsafe-inline.
   res.setHeader(
     'Content-Security-Policy',
-    `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self';`
+    `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'nonce-${nonce}';`
   )
   next()
 })
@@ -103,6 +105,16 @@ function renderLoginPage(nonce, errorMsg = '') {
           <meta charset="utf-8" />
           <title>Ana Bot Login</title>
           <link rel="stylesheet" href="/style.css" />
+          <style nonce="${nonce}">
+            /* fallback minimal styles in case external CSS fails */
+            body{margin:0;font-family:sans-serif;background:#f4f7f9;color:#333}
+            .container{max-width:380px;margin:60px auto;padding:32px 24px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,0.08);border-radius:12px}
+            h3{text-align:center;margin-bottom:24px;font-weight:600}
+            input{font-size:16px;padding:12px;width:100%;box-sizing:border-box;margin-bottom:16px;border:1px solid #ccc;border-radius:6px}
+            button{font-size:16px;padding:12px;width:100%;border:none;border-radius:6px;background:#0078d4;color:#fff;cursor:pointer;font-weight:600}
+            button:disabled,button[style*="display:none"]{background:#aaa;cursor:not-allowed}
+            #hint{font-size:12px;color:#666;margin-top:8px;text-align:center}
+          </style>
         </head>
         <body>
           <div class="container">
@@ -112,7 +124,7 @@ function renderLoginPage(nonce, errorMsg = '') {
               <input id="codeInput" name="code" maxlength="4" autocomplete="off" placeholder="Enter 4-digit code" />
               <button id="submitBtn">Unlock</button>
             </form>
-            <p id="hint">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232. Submit button appears only when the code is correct.</p>
+            <p id="hint">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232. Your code is never shown on the page; enter the current time to unlock. Submit button appears only when the code is correct.</p>
           </div>
           <script nonce="${nonce}">
             function currentCode(){
@@ -187,10 +199,19 @@ app.get('/', (req, res) => {
         <meta charset="utf-8" />
         <title>Ana Bot Status</title>
         <link rel="stylesheet" href="/style.css" />
+        <style nonce="${nonce}">
+          body{margin:0;font-family:sans-serif;background:#f4f7f9;color:#333}
+          .container{max-width:380px;margin:60px auto;padding:32px 24px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,0.08);border-radius:12px}
+          .container.centered{text-align:center}
+          .spinner{width:40px;height:40px;border:4px solid #ddd;border-top-color:#0078d4;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+          @keyframes spin{to{transform:rotate(360deg)}}
+        </style>
       </head>
       <body>
         <div class="container centered">
+          <div class="spinner"></div>
           <h3>⌛ Generating QR…</h3>
+          <p style="font-size:14px;color:#555;margin-top:12px;">Waiting for WhatsApp to send a QR code. Refresh or check the server log if it doesn’t appear.</p>
         </div>
         <script nonce="${nonce}">setTimeout(()=>location.reload(),3000)</script>
       </body>
@@ -204,6 +225,11 @@ app.get('/', (req, res) => {
       <meta charset="utf-8" />
       <title>Ana Bot Status</title>
       <link rel="stylesheet" href="/style.css" />
+      <style nonce="${nonce}">
+        body{margin:0;font-family:sans-serif;background:#f4f7f9;color:#333}
+        .container{max-width:380px;margin:60px auto;padding:32px 24px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,0.08);border-radius:12px}
+        .container.centered{text-align:center}
+      </style>
     </head>
     <body>
       <div class="container centered">
@@ -338,7 +364,9 @@ async function start() {
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
+    console.log('🔁 connection.update', { connection, hasQr: !!qr, lastDisconnect })
     if (qr) {
+      console.log('📷 Received QR from WhatsApp, converting to image...')
       latestQR = await QRCode.toDataURL(qr)
       isConnected = false
     }

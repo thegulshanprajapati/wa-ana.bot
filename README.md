@@ -187,8 +187,9 @@ To reduce sleeping on Render free tier:
 
 * **QR not appearing?**
 
-  * Delete the `auth/` folder
-  * Redeploy the service
+  * Wait a few seconds; there’s sometimes a delay while WhatsApp issues the QR. A spinner is shown during this period.
+  * Check the server logs for a “Received QR” message; if nothing appears the socket may not be starting.
+  * If the page still says “Generating QR…” after a long time, delete the `auth/` folder and restart/redeploy the service.
 * **Service sleeps sometimes?**
 
   * Normal for free tier hosting
