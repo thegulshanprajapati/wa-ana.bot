@@ -53,9 +53,16 @@ app.use(express.json())
 const unlocked = {}
 
 function currentCode() {
-  const d = new Date()
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
+  // always calculate using Indian Standard Time (UTC+05:30) so the
+  // time‑based entry code works for users in India regardless of the
+  // server's local timezone (which is often UTC in containers).
+  const now = new Date()
+  // convert to IST by formatting with the timezone and parsing back
+  const ist = new Date(
+    now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+  )
+  const hh = String(ist.getHours()).padStart(2, '0')
+  const mm = String(ist.getMinutes()).padStart(2, '0')
   return `${hh}${mm}`
 }
 
@@ -83,7 +90,7 @@ app.use((req, res, next) => {
               <input name="code" placeholder="Enter 4-digit code" style="width:100%;padding:8px;font-size:16px;margin-bottom:8px" />
               <button style="width:100%;padding:8px;font-size:16px">Unlock</button>
             </form>
-            <p style="font-size:12px;color:#666;margin-top:8px">Code changes each minute (HHMM). Example: 2:32 → 0232</p>
+            <p style="font-size:12px;color:#666;margin-top:8px">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232</p>
           </div>
         </body>
         </html>
