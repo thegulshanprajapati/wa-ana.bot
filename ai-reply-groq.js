@@ -76,25 +76,62 @@ function getTokenFromReq(req) {
   return null
 }
 
+
+// helper that returns the login page HTML; accepts an optional error message
+function renderLoginPage(errorMsg = '') {
+  return `
+        <html>
+        <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+          <div style="width:320px">
+            <h3 style="text-align:center">Protected UI — Enter code</h3>
+            ${errorMsg ? `<p style="color:red;text-align:center">${errorMsg}</p>` : ''}
+            <form method="POST" action="/login" id="loginForm">
+              <input id="codeInput" name="code" maxlength="4" autocomplete="off" placeholder="Enter 4-digit code" style="width:100%;padding:8px;font-size:16px;margin-bottom:8px" />
+              <button id="submitBtn" style="width:100%;padding:8px;font-size:16px">Unlock</button>
+            </form>
+            <p id="hint" style="font-size:12px;color:#666;margin-top:8px">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232. Submit button appears only when the code is correct.</p>
+          </div>
+          <script>
+            function currentCode(){
+              const now=new Date();
+              const ist=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+              const hh=String(ist.getHours()).padStart(2,'0');
+              const mm=String(ist.getMinutes()).padStart(2,'0');
+              return hh+mm;
+            }
+            document.addEventListener('DOMContentLoaded',()=>{
+              const input=document.getElementById('codeInput');
+              const btn=document.getElementById('submitBtn');
+              const hint=document.getElementById('hint');
+              btn.style.display='none';
+              input.addEventListener('input',()=>{
+                if(input.value===currentCode()){
+                  btn.style.display='block';
+                  hint.textContent='✅ Code correct! Press unlock.';
+                } else {
+                  btn.style.display='none';
+                  hint.textContent='Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232';
+                }
+              });
+              setInterval(()=>{
+                if(input.value===currentCode()){
+                  btn.style.display='block';
+                  hint.textContent='✅ Code correct! Press unlock.';
+                }
+              },1000);
+            });
+          </script>
+        </body>
+        </html>
+  `
+}
+
 // simple guard for GET UI routes
 app.use((req, res, next) => {
   if (req.method === 'GET' && req.path !== '/status' && req.path !== '/login') {
     const token = getTokenFromReq(req)
     if (!token || !unlocked[token]) {
-      return res.send(`
-        <html>
-        <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
-          <div style="width:320px">
-            <h3 style="text-align:center">Protected UI — Enter code</h3>
-            <form method="POST" action="/login">
-              <input name="code" placeholder="Enter 4-digit code" style="width:100%;padding:8px;font-size:16px;margin-bottom:8px" />
-              <button style="width:100%;padding:8px;font-size:16px">Unlock</button>
-            </form>
-            <p style="font-size:12px;color:#666;margin-top:8px">Code changes each minute (HHMM) and uses Indian time (IST). Example: 2:32 → 0232</p>
-          </div>
-        </body>
-        </html>
-      `)
+      return res.send(renderLoginPage())
     }
   }
   next()
@@ -132,14 +169,18 @@ app.get('/chats', (_, res) => {
 })
 
 app.post('/login', (req, res) => {
-  const code = (req.body && req.body.code) || ''
+  // sanitize input: trim whitespace and keep only first 4 digits
+  let code = (req.body && req.body.code) || ''
+  code = String(code).trim().slice(0, 4)
+  console.log('login attempt, code:', code, 'expected:', currentCode())
   if (code === currentCode()) {
     const token = Math.random().toString(36).slice(2)
     unlocked[token] = Date.now()
     res.setHeader('Set-Cookie', `token=${token}; HttpOnly; Path=/; Max-Age=300`)
     return res.redirect('/')
   }
-  return res.send('<p>Invalid code. <a href="/">Try again</a></p>')
+  // show the page again with an error message
+  return res.send(renderLoginPage('Invalid code.'))
 })
 
 app.post('/send', async (req, res) => {
